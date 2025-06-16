@@ -155,11 +155,99 @@ scree(mat_cor, factors = TRUE, pc = TRUE,
       main = "Scree Plot con Kaiser y PCA", 
       hline=NULL, add=FALSE, sqrt=FALSE)
 
-
 ###PASO 4: ROTACIÓN DE FACTORES (Ortogonal u oblicua)###
 
-resultado <- fa(mat_cor, nfactors = 2, fm = "minres", rotate = "oblimin", n.obs = 3385)
+library(GPArotation)
+library(psych)
+
+resultado <- fa(mat_cor, nfactors = 4, fm = "minres", rotate = "oblimin", n.obs = 3385)
+
+# Revisar la matriz Phi (correlaciones entre factores)
 resultado$Phi  # Si hay correlaciones > 0.3 entre factores, usar oblimin. Si no, mejor varimax.
 
+###PASO 5: INTERPRETACIÓN
+
 #Cargas factoriales
-resultado$loadings
+print(resultado$loadings)
+
+
+#Gráfico de árbol
+
+fa.diagram(resultado,
+           simple = FALSE,               # Muestra todas las cargas, no solo las más fuertes
+           cut = 0.3,                    # Umbral de visualización de cargas
+           digits = 2,                   # Redondeo
+           main = "Diagrama factorial")
+##o 
+## Biplot de variables (estructura factorial)
+library(corrplot)
+corrplot(resultado$loadings[,1:4], is.corr = FALSE, tl.cex = 0.7)
+
+
+###PASO 6: ESTIMACIÓN DE PUNTUACIONES FACTORIALES
+
+#Estandarizar los datos, importante para que las puntuaciones sean comparables.
+grupos_prom_std <- scale(grupos_prom)
+
+# Calcular puntuaciones factoriales con dos métodos
+fs_reg <- factor.scores(grupos_prom_std, resultado, method = "regression")
+fs_bartlett <- factor.scores(grupos_prom_std, resultado, method = "Bartlett")
+
+# Ver los primeros puntajes
+head(fs_reg$scores)
+summary(fs_reg$scores)
+
+#########################################################
+library(ggplot2)
+library(dplyr)
+puntajes <- as.data.frame(fs_reg$scores)
+
+# PASO 7: CLASIFICAR POR PERFIL ALIMENTARIO
+
+puntajes$Perfil <- colnames(puntajes)[apply(puntajes, 1, which.max)]
+
+# Opcional: asignar nombres descriptivos a los factores
+nombres_perfil <- c(
+  MR1 = "Proteico-Dulce",
+  MR2 = "Saludable-Natural",
+  MR3 = "Lácteo-Graso",
+  MR4 = "Energético-Antojo")
+puntajes$Perfil <- nombres_perfil[puntajes$Perfil]
+
+# Gráfico 1: MR1 vs MR2
+ggplot(puntajes, aes(x = MR1, y = MR2, color = Perfil)) +
+  geom_point(size = 2.5, alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray") +
+  labs(title = "MR1 vs MR2: Proteico-Dulce vs Saludable-Natural",
+       x = "MR1 (Proteico-Dulce)",
+       y = "MR2 (Saludable-Natural)") +
+  theme_minimal()
+
+# Gráfico 2: MR3 vs MR4
+ggplot(puntajes, aes(x = MR3, y = MR4, color = Perfil)) +
+  geom_point(size = 2.5, alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray") +
+  labs(title = "MR3 vs MR4: Lácteo-Graso vs Energético-Antojo",
+       x = "MR3 (Lácteo-Graso)",
+       y = "MR4 (Energético-Antojo)") +
+  theme_minimal()
+
+
+
+#Guardar base nueva con los perfiles x folio
+
+# Volver a leer la hoja "FREC" y conservar solo la columna folio
+folio <- read_excel("~/Tesis/Bases/SMAE2025_CFC.xlsx.xlsx", sheet = "FREC")[, 1]
+
+# Asegúrar de que el número de filas coincida
+stopifnot(nrow(folio) == nrow(puntajes))
+
+# Unir folio con puntajes
+puntajes_con_folio <- cbind(folio, puntajes)
+
+# Exportar a CSV o Excel
+write.csv(puntajes_con_folio, "puntajes_con_folio.csv", row.names = FALSE)
+
+
