@@ -1,70 +1,76 @@
-#CARGAR BASE
-
 library(readxl)
 
-# Leer matrices desde hojas diferentes y eliminar la col "folio"
-matriz1 <- as.matrix(read_excel("~/Tesis/Bases/SMAE2025_CFC.xlsx.xlsx", sheet = "FREC")[, -1])
-matriz2 <- as.matrix(read_excel("~/Tesis/Bases/SMAE2025_CFC.xlsx.xlsx", sheet = "KCAL")[, -1])
+#CARGAR BASE Y CONTRUIR LA MATRIZ DE CONSUMO 
 
-#Verificar si son de la misma dimensión
+Data <- read_excel("~/Tesis/Bases/Tlalpan 2020 patrones.xlsx")
+
+#Determinar las matrices para FREC y KCAL
+matriz1 <- as.matrix(Data[, grep("^FREC\\d{3}$", names(Data))]) #busca columnas que tengan exactamente el formato "FREC" + 3 digitos.
+matriz2 <- as.matrix(Data[, grep("^KCAL\\d{3}$", names(Data))]) #lo mismo, pero para "KCAL"
+
+#Verificar que las matrices son de la misma dimension
 identical(dim(matriz1), dim(matriz2))
 
 
 #Matriz de resultado
+matriz <- matriz1*matriz2
 
-data<- matriz1*matriz2
 
 #IDENTIFICAR SI HAY DATOS FALTANTES
+
 library(tidyverse)
-sum(is.na(data)) #sum para contabilizar el total de NA's
-summary(data) # para ver la información resumida de cada columna
+
+sum(is.na(matriz)) #para contabilizar el total de NA's
+summary(matriz) #para ver la información resumida de cada columna
 
 
 #AGRUPAR ALIMENTOS Y PROMEDIAR POR GRUPO
-grupo_lacteos <- data[, c("FREC001", "FREC002","FREC003","FREC004", 
-                          "FREC005", "FREC006", "FREC007")] #la coma antes de c permite crear un dataframe de cols completas, sin ella creariamos una lista.
+#La matriz conserva los nombres de la primera matriz "FREC"
+colnames(matriz)
 
-grupo_frutas <- data[, c("FREC008","FREC009","FREC010","FREC011",
+grupo_lacteos <- matriz[, c("FREC001", "FREC002", "FREC003", 
+                            "FREC004", "FREC005", "FREC006", "FREC007")] #la coma, antes de c, permite crear un dataframe de cols completas, sin ella creariamos una lista.
+
+grupo_frutas <- matriz[, c("FREC008","FREC009","FREC010","FREC011",
                          "FREC012","FREC013","FREC014","FREC015",
                          "FREC016","FREC017","FREC018","FREC019",
                          "FREC021","FREC022","FREC023","FREC024",
                          "FREC025")]
 
-grupo_carnes <- data[, c("FREC026","FREC027","FREC028","FREC029",
+grupo_carnes <- matriz[, c("FREC026","FREC027","FREC028","FREC029",
                          "FREC030","FREC031","FREC032","FREC033",
                          "FREC034","FREC035","FREC036","FREC037",
                          "FREC038","FREC039","FREC040","FREC041")]
 
-grupo_verduras <- data[, c("FREC042","FREC043","FREC044","FREC045",
+grupo_verduras <- matriz[, c("FREC042","FREC043","FREC044","FREC045",
                            "FREC046","FREC047","FREC048","FREC049",
                            "FREC050","FREC051","FREC052","FREC053",
                            "FREC054","FREC055","FREC056","FREC057",
                            "FREC058")]
 
-grupo_leguminosas <- data[, c("FREC059","FREC060","FREC061","FREC062",
+grupo_leguminosas <- matriz[, c("FREC059","FREC060","FREC061","FREC062",
                               "FREC063")]
 
-grupo_cereales <- data[, c("FREC064","FREC065","FREC066","FREC067",
+grupo_cereales <- matriz[, c("FREC064","FREC065","FREC066","FREC067",
                            "FREC068","FREC069","FREC070","FREC071",
                            "FREC072")]
 
-grupo_golosinas <- data[, c("FREC075","FREC076","FREC077","FREC078",
+grupo_golosinas <- matriz[, c("FREC075","FREC076","FREC077","FREC078",
                             "FREC079")]
 
-grupo_bebidas <- data[, c("FREC080","FREC081","FREC082","FREC083",
+grupo_bebidas <- matriz[, c("FREC080","FREC081","FREC082","FREC083",
                           "FREC084","FREC085","FREC086","FREC087",
                           "FREC088","FREC089")]
 
 
-grupo_grasas <- data[, c("FREC090","FREC091","FREC092","FREC093",
+grupo_grasas <- matriz[, c("FREC090","FREC091","FREC092","FREC093",
                          "FREC094","FREC095","FREC096","FREC097",
                          "FREC098","FREC099","FREC100")]
 
-grupo_antojitos <- data[, c("FREC101","FREC102","FREC103","FREC104")]
+grupo_antojitos <- matriz[, c("FREC101","FREC102","FREC103","FREC104")]
 
 
 #Calcular el promedio por grupo
-
 lacteos_prom<-rowMeans(grupo_lacteos,na.rm = TRUE)
 
 frutas_prom<-rowMeans(grupo_frutas,na.rm = TRUE)
@@ -85,14 +91,17 @@ grasas_prom<-rowMeans(grupo_grasas, na.rm = TRUE)
 
 antojitos_prom<-rowMeans(grupo_antojitos, na.rm = TRUE)
 
-#Crear dataframe con los promedios por grupo
 
+#Crear dataframe con los promedios por grupo
 grupos_prom<-data.frame(lacteos_prom, frutas_prom, carnes_prom,
                    verduras_prom, leguminosas_prom, cereales_prom,
                    golosinas_prom, bebidas_prom, grasas_prom, antojitos_prom)
 
+################################################################################
 
-###PASO 1: VERIFICAR QUE LA MATRIZ DE DATOS ES FACTORIZABLE###
+###ANALISIS FACTORIAL EXPLORATORIO
+
+###PASO 1: VERIFICAR QUE LA MATRIZ DE CORRELACIÓN DE DATOS ES FACTORIZABLE###
 
 #matriz de correlación policorica
 library(psych)
@@ -103,24 +112,26 @@ mat_cor <- hetcor(grupos_prom)$correlations
 ggcorrplot(mat_cor,type="lower",hc.order = T)
 print(mat_cor)
 
-#Verificar que la matriz sea factorizable usando la prueba de Bartlett o el criterio de Kaiser-Meyer-Olkin, ¿Existe la suficiente correlación para efectuar AF?
-
-#Bartlett
+#Prueba de Bartlett
 cortest.bartlett((mat_cor),n=3385)->p_esf
-p_esf$p #Dado que el p−value=0, rechazamos la hipótesis nula y concluimos que las variables efectivamente están correlacionadas entre sí.
+p_esf$p #Dado que el p−value=0, rechazamos la hipotesis nula y concluimos que las variables efectivamente estan correlacionadas entre si.
 
 #KMO
-KMO(mat_cor) #El valor global es de 0.81, entre más cercano a 1 nos indica que es adecuado realizar el EFA.
+KMO(mat_cor) #El valor global, entre mas cercano a 1 nos indica que es adecuado realizar el EFA.
 
-###PASO 2: ESCOGER UN MÉTODO PARA EXTRAER FACTORES###
 
-#probar 2 modelos
+###PASO 2: ESCOGER UN METODO PARA EXTRAER FACTORES###
+
+#probar 2 modelos de fm y explorar el numero max de nfactores
 m1 <- fa(mat_cor, nfactor=4, rotate = "none",
          fm="minres", max.iter = 1000, n.obs = 3385 ) #modelo de min residuo
+print(m1$loadings, cutoff = 0)
+m1$communality #nos proporciona las comunalidades
 
 m2<- fa(mat_cor, nfactor=4, rotate = "none",
         fm="pa", max.iter = 1000, n.obs = 3385 ) #modelo de ejes principales
-
+print(m2$loadings, cutoff = 0)
+m2$communality #nos proporciona las comunalidades
 
 #comparacion de comunalidades
 c1 <-sort(m1$communality, decreasing = T)
@@ -131,6 +142,7 @@ head(cbind(c1,c2))
 #comparación de las unicidades 
 u1 <- sort(m1$uniquenesses,decreasing = T)
 u2 <- sort(m2$uniquenesses,decreasing = T)
+
 head(cbind(u1,u2))
 
 ###PASO 3: DETERMINAR EL NUMERO DE FACTORES ###
@@ -144,75 +156,74 @@ length(ei[ei > 1])  # Cantidad de factores recomendados
 plot(ei,type="b",pch=20,col="blue",
      xlab = "Factor", ylab = "Valor propio",
      main = "Scree Plot (Criterio de Kaiser)")
-abline(h=1,lty=3,col="red") # Línea de Kaiser
+abline(h=1,lty=3,col="red") # Linea de Kaiser
 
-#3. Analisis paralelo
+#3. Analisis en paralelo
 
 fa.parallel(mat_cor, fa = "both", n.iter = 1000, n.obs = 3385)
 
-par(mfrow=c(1,1))  # Esto evita que se divida la pantalla
+par(mfrow=c(1,1))  # Esto evita que se divida la pantalla (REVISAR)
 scree(mat_cor, factors = TRUE, pc = TRUE,
       main = "Scree Plot con Kaiser y PCA", 
       hline=NULL, add=FALSE, sqrt=FALSE)
 
-###PASO 4: ROTACIÓN DE FACTORES (Ortogonal u oblicua)###
+
+###PASO 4: ROTACION DE FACTORES (Ortogonal u oblicua)###
 
 library(GPArotation)
 library(psych)
+library(corrplot)
 
+#Usaremos 4 factores, minres por mejor modelo. Ajustar rotacion de ser necesaria si lo sugiere la matriz Phi
 resultado <- fa(mat_cor, nfactors = 4, fm = "minres", rotate = "oblimin", n.obs = 3385)
 
-# Revisar la matriz Phi (correlaciones entre factores)
+#Revisar la matriz Phi (correlaciones entre factores)
 resultado$Phi  # Si hay correlaciones > 0.3 entre factores, usar oblimin. Si no, mejor varimax.
 
-###PASO 5: INTERPRETACIÓN
 
-#Cargas factoriales
-print(resultado$loadings)
+###PASO 5: INTERPRETACION
 
+#Observar cargas factoriales
+print(resultado$loadings, cutoff = 0)
+resultado$communality #comunalidades con rotacion
 
-#Gráfico de árbol
-
+#Graficos de arbol o biplot de variables (estructura factorial)
 fa.diagram(resultado,
-           simple = FALSE,               # Muestra todas las cargas, no solo las más fuertes
-           cut = 0.3,                    # Umbral de visualización de cargas
-           digits = 2,                   # Redondeo
+           simple = FALSE,# Muestra todas las cargas, no solo las mas fuertes
+           cut = 0.3, # Umbral de visualización de cargas
+           digits = 2,# Redondeo
            main = "Diagrama factorial")
-##o 
-## Biplot de variables (estructura factorial)
-library(corrplot)
+
+
 corrplot(resultado$loadings[,1:4], is.corr = FALSE, tl.cex = 0.7)
 
 
-###PASO 6: ESTIMACIÓN DE PUNTUACIONES FACTORIALES
+###PASO 6: ESTIMACION DE PUNTUACIONES FACTORIALES
 
 #Estandarizar los datos, importante para que las puntuaciones sean comparables.
 grupos_prom_std <- scale(grupos_prom)
 
-# Calcular puntuaciones factoriales con dos métodos
+# Calcular puntuaciones factoriales con dos metodos
 fs_reg <- factor.scores(grupos_prom_std, resultado, method = "regression")
 fs_bartlett <- factor.scores(grupos_prom_std, resultado, method = "Bartlett")
 
 # Ver los primeros puntajes
 head(fs_reg$scores)
-summary(fs_reg$scores)
-
-#########################################################
-library(ggplot2)
-library(dplyr)
 puntajes <- as.data.frame(fs_reg$scores)
 
 # PASO 7: CLASIFICAR POR PERFIL ALIMENTARIO
 
 puntajes$Perfil <- colnames(puntajes)[apply(puntajes, 1, which.max)]
 
-# Opcional: asignar nombres descriptivos a los factores
+#Asignar nombres a los factores (REVISAR SI SON ADECUADOS)
 nombres_perfil <- c(
   MR1 = "Proteico-Dulce",
   MR2 = "Saludable-Natural",
   MR3 = "Lácteo-Graso",
   MR4 = "Energético-Antojo")
 puntajes$Perfil <- nombres_perfil[puntajes$Perfil]
+
+#Graficar factores versus factores
 
 # Gráfico 1: MR1 vs MR2
 ggplot(puntajes, aes(x = MR1, y = MR2, color = Perfil)) +
@@ -224,7 +235,7 @@ ggplot(puntajes, aes(x = MR1, y = MR2, color = Perfil)) +
        y = "MR2 (Saludable-Natural)") +
   theme_minimal()
 
-# Gráfico 2: MR3 vs MR4
+# Grafico 2: MR3 vs MR4
 ggplot(puntajes, aes(x = MR3, y = MR4, color = Perfil)) +
   geom_point(size = 2.5, alpha = 0.8) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
@@ -234,20 +245,28 @@ ggplot(puntajes, aes(x = MR3, y = MR4, color = Perfil)) +
        y = "MR4 (Energético-Antojo)") +
   theme_minimal()
 
+# Grafico 3: MR1 vs MR3
+ggplot(puntajes, aes(x = MR1, y = MR3, color = Perfil)) +
+  geom_point(size = 2.5, alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray") +
+  labs(title = "MR1 vs MR3: Proteico-Dulce vs Lácteo-Graso",
+       x = "MR1 (Proteico-Dulce)",
+       y = "MR3 (Lácteo-Graso)") +
+  theme_minimal()
 
 
-#Guardar base nueva con los perfiles x folio
 
-# Volver a leer la hoja "FREC" y conservar solo la columna folio
-folio <- read_excel("~/Tesis/Bases/SMAE2025_CFC.xlsx.xlsx", sheet = "FREC")[, 1]
+#GUARDAR BASE DE PERFILES CON FOLIO
 
-# Asegúrar de que el número de filas coincida
+# Vectorizamos la col "folio"
+folio <- read_excel("~/Tesis/Bases/Tlalpan 2020 patrones.xlsx")
+
+#Nos asegurar de que el número de filas coincida
 stopifnot(nrow(folio) == nrow(puntajes))
 
-# Unir folio con puntajes
+#Unimos folio con puntajes
 puntajes_con_folio <- cbind(folio, puntajes)
 
 # Exportar a CSV o Excel
-write.csv(puntajes_con_folio, "puntajes_con_folio.csv", row.names = FALSE)
-
-
+write.csv(puntajes_con_folio, "Tlalpan 2020 patrones2.csv", row.names = FALSE)
