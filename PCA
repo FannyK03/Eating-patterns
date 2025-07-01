@@ -1,0 +1,159 @@
+library(readxl)
+library(psych)
+library(corrplot)
+library(factoextra)
+
+#CARGAR BASE Y CONTRUIR LA MATRIZ DE CONSUMO 
+
+Data <- read_excel("~/Tesis/Bases/Tlalpan 2020 patrones.xlsx")
+
+#Determinar las matrices para FREC y KCAL
+matriz1 <- as.matrix(Data[, grep("^FREC\\d{3}$", names(Data))]) #busca columnas que tengan exactamente el formato "FREC" + 3 digitos.
+matriz2 <- as.matrix(Data[, grep("^KCAL\\d{3}$", names(Data))]) #lo mismo, pero para "KCAL"
+
+#Verificar que las matrices son de la misma dimension
+identical(dim(matriz1), dim(matriz2))
+
+
+#Matriz de resultado (consumo)
+data <- matriz1 * matriz2
+
+# Agrupar alimentos y calcular promedios por grupo (igual que en tu script)
+grupo_lacteos <- data[, c("FREC001", "FREC002","FREC003","FREC004", 
+                          "FREC005", "FREC006", "FREC007")] #la coma antes de c permite crear un dataframe de cols completas, sin ella creariamos una lista.
+
+grupo_frutas <- data[, c("FREC008","FREC009","FREC010","FREC011",
+                         "FREC012","FREC013","FREC014","FREC015",
+                         "FREC016","FREC017","FREC018","FREC019",
+                         "FREC021","FREC022","FREC023","FREC024",
+                         "FREC025")]
+
+grupo_carnes <- data[, c("FREC026","FREC027","FREC028","FREC029",
+                         "FREC030","FREC031","FREC032","FREC033",
+                         "FREC034","FREC035","FREC036","FREC037",
+                         "FREC038","FREC039","FREC040","FREC041")]
+
+grupo_verduras <- data[, c("FREC042","FREC043","FREC044","FREC045",
+                           "FREC046","FREC047","FREC048","FREC049",
+                           "FREC050","FREC051","FREC052","FREC053",
+                           "FREC054","FREC055","FREC056","FREC057",
+                           "FREC058")]
+
+grupo_leguminosas <- data[, c("FREC059","FREC060","FREC061","FREC062",
+                              "FREC063")]
+
+grupo_cereales <- data[, c("FREC064","FREC065","FREC066","FREC067",
+                           "FREC068","FREC069","FREC070","FREC071",
+                           "FREC072")]
+
+grupo_golosinas <- data[, c("FREC075","FREC076","FREC077","FREC078",
+                            "FREC079")]
+
+grupo_bebidas <- data[, c("FREC080","FREC081","FREC082","FREC083",
+                          "FREC084","FREC085","FREC086","FREC087",
+                          "FREC088","FREC089")]
+
+
+grupo_grasas <- data[, c("FREC090","FREC091","FREC092","FREC093",
+                         "FREC094","FREC095","FREC096","FREC097",
+                         "FREC098","FREC099","FREC100")]
+
+grupo_antojitos <- data[, c("FREC101","FREC102","FREC103","FREC104")]
+
+
+#Calcular el promedio por grupo
+lacteos_prom<-rowMeans(grupo_lacteos,na.rm = TRUE)
+
+frutas_prom<-rowMeans(grupo_frutas,na.rm = TRUE)
+
+carnes_prom<-rowMeans(grupo_carnes, na.rm = TRUE)
+
+verduras_prom<-rowMeans(grupo_verduras, na.rm = TRUE)
+
+leguminosas_prom<-rowMeans(grupo_leguminosas, na.rm = TRUE)
+
+cereales_prom<-rowMeans(grupo_cereales, na.rm = TRUE)
+
+golosinas_prom<-rowMeans(grupo_golosinas, na.rm = TRUE)
+
+bebidas_prom<-rowMeans(grupo_bebidas, na.rm = TRUE)
+
+grasas_prom<-rowMeans(grupo_grasas, na.rm = TRUE)
+
+antojitos_prom<-rowMeans(grupo_antojitos, na.rm = TRUE)
+
+# Crear dataframe con promedios por grupo
+grupos_prom <- data.frame(
+  lacteos_prom, frutas_prom, carnes_prom, verduras_prom,
+  leguminosas_prom, cereales_prom, golosinas_prom,
+  bebidas_prom, grasas_prom, antojitos_prom
+)
+
+### PASO 1: Verificar supuestos del PCA ###
+
+# 1. Tamaño de muestra: n > 5 * numero de variables (se cumple con 3385 casos)
+# 2. Correlación entre variables
+
+# Matriz de correlacion
+cor_matrix <- cor(grupos_prom, use = "pairwise.complete.obs")
+corrplot(cor_matrix, method = "color", type = "lower", tl.cex = 0.6)
+
+# Prueba de esfericidad de Bartlett
+cortest.bartlett(cor_matrix, n = nrow(grupos_prom))
+
+# KMO
+KMO(cor_matrix)
+
+### PASO 2: PCA inicial ###
+
+# Estandarizar datos
+grupos_std <- scale(grupos_prom)
+
+# PCA con prcomp
+pca_result <- prcomp(grupos_std, center = TRUE, scale. = TRUE)
+
+# Ver resumen
+summary(pca_result)
+pca_result$rotation[, 1:5]
+
+# Comunalidades (h²) para las primeras 2 dimensiones
+pca_result$rotation[, 1:2]
+
+
+
+### PASO 3: Determinar numero de componentes ###
+
+# Scree plot y varianza explicada
+fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 50))
+
+# Tabla de varianza explicada
+pca_var <- pca_result$sdev^2
+pca_var_exp <- pca_var / sum(pca_var)
+cumsum(pca_var_exp)
+
+### PASO 4: Interpretacion y visualizacion ###
+
+# Cargas (autovectores)
+pca_result$rotation
+
+# Biplot
+fviz_pca_biplot(pca_result, repel = TRUE,
+                col.var = "steelblue", col.ind = "gray40")
+
+# Grafico de individuos por los dos primeros componentes
+fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = "cos2", # calidad de representación
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE)
+
+# Grafico de variables
+fviz_pca_var(pca_result,
+             col.var = "contrib", # contribucion a los componentes
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+ 
+                         repel = TRUE)
+######################################################
+
+# Comunalidades (h²) para las primeras 2 dimensiones
+h2_pca <- rowSums(pca$rotation[, 1:2]^2)
