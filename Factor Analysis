@@ -2,7 +2,7 @@ library(readxl)
 
 #CARGAR BASE Y CONTRUIR LA MATRIZ DE CONSUMO 
 
-Data <- read_excel("~/Tesis/Bases/Tlalpan 2020 patrones.xlsx")
+Data <- read_excel("~/Tesis/Bases/patrones.xlsx")
 
 #Determinar las matrices para FREC y KCAL
 matriz1 <- as.matrix(Data[, grep("^FREC\\d{3}$", names(Data))]) #busca columnas que tengan exactamente el formato "FREC" + 3 digitos.
