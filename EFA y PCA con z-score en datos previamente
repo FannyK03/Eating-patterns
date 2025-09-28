@@ -1,0 +1,402 @@
+library(readxl)
+library(tidyverse)
+library(psych)
+library(corrplot)
+library(ggcorrplot)
+library(reshape2)
+library(ggplot2)
+
+#1.CARGAR BASE 
+
+datos <-read_excel("Tesis/Bases/Tlalpan 2020_LIMPIO.xlsx", sheet = "datos")
+conversion <-read_excel("Tesis/Bases/Tlalpan 2020_LIMPIO.xlsx", sheet = "conv")
+
+#Crear una nueva base a partir de las 2 hojas anteriores 
+
+datos_largos <- datos %>%
+  pivot_longer(
+    cols = starts_with("FREC"),
+    names_to = "FREC_ID",
+    values_to = "frecuencia")
+
+datos_nutri <- datos_largos %>%
+  left_join(conversion, by = "FREC_ID")
+
+#2. VERIFICAR NUMERO DE FOLIOS
+
+# Contar cuántas veces se repite cada folio
+conteo_folios <- datos_nutri %>%
+  group_by(FOLIO) %>%
+  summarise(repeticiones = n())
+
+# Ver las primeras filas para revisar
+head(conteo_folios)
+
+# Total de folios únicos
+total_folios <- n_distinct(datos_nutri$FOLIO)
+total_folios
+
+
+#3. AGRUPAR ALIMENTOS
+
+grupos <- list(
+  lacteos = c("FREC001","FREC002","FREC003","FREC004","FREC005","FREC006","FREC007"),
+  frutas  = c("FREC008","FREC009","FREC010","FREC011","FREC012","FREC013","FREC014","FREC015",
+              "FREC016","FREC017","FREC018","FREC019","FREC020","FREC021","FREC022","FREC023","FREC024","FREC025"),
+  carnes  = c("FREC026","FREC027","FREC028","FREC029","FREC030","FREC031","FREC032","FREC033",
+              "FREC034","FREC035","FREC036","FREC037","FREC038","FREC039","FREC040","FREC041"),
+  verduras= c("FREC042","FREC043","FREC044","FREC045","FREC046","FREC047","FREC048","FREC049",
+              "FREC050","FREC051","FREC052","FREC053","FREC054","FREC055","FREC056","FREC057","FREC058"),
+  leguminosas = c("FREC059","FREC060","FREC061","FREC062","FREC063"),
+  cereales    = c("FREC064","FREC065","FREC066","FREC067","FREC068","FREC069","FREC070","FREC071","FREC072"),
+  golosinas   = c("FREC075","FREC076","FREC077","FREC078","FREC079"),
+  bebidas     = c("FREC080","FREC081","FREC082","FREC083","FREC084","FREC085","FREC086","FREC087","FREC088","FREC089"),
+  grasas      = c("FREC090","FREC091","FREC092","FREC093","FREC094","FREC095","FREC096","FREC097","FREC098","FREC099","FREC100"),
+  antojitos   = c("FREC101","FREC102","FREC103","FREC104")
+)
+
+#Transformar lista de grupos a dataframe largo
+agrupacion <- purrr::imap_dfr(grupos, ~ tibble(FREC_ID = .x, grupo = .y))
+
+#Unir con datos_nutri
+datos_nutri <- datos_nutri %>%
+  left_join(agrupacion, by = "FREC_ID") %>%
+  relocate(grupo, .after = `ALIMENTO`)
+
+#Verificar grupos y número de FREC_ID para cada uno
+#FREC_agru <- unlist(grupos)
+#FREC_sin_grupo <- setdiff(unique(datos_nutri$FREC_ID), FREC_agru)
+#FREC_sin_grupo
+#length(FREC_sin_grupo)   # cuántos sin agrupar
+#table(FREC_sin_grupo)    # frecuencias (si repiten en varias filas)
+
+
+#4. CONVERSIÓN DE LOS MACRONUTRIENTES 
+
+#Calcular consumo diario por alimento y participante
+datos_nutri <- datos_nutri %>%
+  mutate(
+    # Consumo en gramos por día
+    Prot_g_dia  = frecuencia * `Prot_CFC_(g)`,
+    Lip_g_dia   = frecuencia * `Lip_CFC_(g)`,
+    CHO_g_dia   = frecuencia * `CHO_CFC_(g)`,
+    EtOH_g_dia  = frecuencia * `EtOH_CFC_(g)`,
+    
+    # Consumo en kcal usando factores de conversión
+    Prot_kcal_dia = Prot_g_dia * 4,
+    Lip_kcal_dia  = Lip_g_dia * 9,
+    CHO_kcal_dia  = CHO_g_dia * 4,
+    EtOH_kcal_dia = EtOH_g_dia * 7,
+    
+    # Total de kcal diarias por alimento 
+    Kcal_total_dia = Prot_kcal_dia + Lip_kcal_dia + CHO_kcal_dia + EtOH_kcal_dia
+  )
+
+#5. RESUMENES POR PARTICIPANTE (FOLIO)
+
+#Desglose de macronutrientes por gramos y Kcal diarios, así como la suma total de energía.
+
+resumen_por_macros <- datos_nutri %>%
+  group_by(FOLIO) %>%
+  summarise(
+    
+    #Totales en gramos
+    Prot_g_dia_total =sum(Prot_g_dia, na.rm = TRUE),
+    Lip_g_dia_total  =sum(Lip_g_dia, na.rm = TRUE),
+    CHO_g_dia_total  =sum(CHO_g_dia, na.rm = TRUE),
+    EtOH_g_dia_total =sum(EtOH_g_dia, na.rm = TRUE),
+    
+    #Totales en kcal
+    Prot_kcal_dia_total =sum(Prot_kcal_dia, na.rm = TRUE),
+    Lip_kcal_dia_total  =sum(Lip_kcal_dia, na.rm = TRUE),
+    CHO_kcal_dia_total  =sum(CHO_kcal_dia, na.rm = TRUE),
+    EtOH_kcal_dia_total =sum(EtOH_kcal_dia, na.rm = TRUE),
+    
+    #Energía total de todos los alimentos
+    Kcal_total_dia_alimentos =sum(Kcal_total_dia, na.rm = TRUE)
+    
+  )
+
+#Revisar si hay Energía total igual a cero
+resumen_por_macros %>%
+  filter(is.na(Kcal_total_dia_alimentos) | Kcal_total_dia_alimentos == 0) %>%
+  select(FOLIO, Kcal_total_dia_alimentos) 
+#Nota; se encontraron 3 folios, en la base original tienen valores 0 y no 99 o NA transformados, por lo que se elimina del análisis  
+
+
+#Desglose por grupo de alimentos, kcal y energía total de cada uno.
+
+resumen_por_grupo <- datos_nutri %>%
+  group_by(FOLIO, grupo) %>%
+  summarise(
+    
+    #Totales en gramos
+    Prot_g   = sum(Prot_g_dia, na.rm = TRUE),
+    Lip_g    = sum(Lip_g_dia, na.rm = TRUE),
+    CHO_g    = sum(CHO_g_dia, na.rm = TRUE),
+    EtOH_g   = sum(EtOH_g_dia, na.rm = TRUE),
+    
+    #Totales en kcal
+    Prot_kcal_dia =sum(Prot_kcal_dia, na.rm = TRUE),
+    Lip_kcal_dia  =sum(Lip_kcal_dia, na.rm = TRUE),
+    CHO_kcal_dia  =sum(CHO_kcal_dia, na.rm = TRUE),
+    EtOH_kcal_dia =sum(EtOH_kcal_dia, na.rm = TRUE),
+    
+    #Energía total de todos los alimentos
+    Energia_total_grupo = sum(Kcal_total_dia, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% #Agregar energía total del participante (que ya se tiene)
+  
+  left_join(
+    resumen_por_macros %>%
+      select(FOLIO,Kcal_total_dia_alimentos),
+    by = "FOLIO"
+  ) %>% #Calcular porcentaje de  distribución energética del grupo
+  mutate(
+    pct_energia_grupo = (Energia_total_grupo/Kcal_total_dia_alimentos)* 100
+  )
+
+#Filtrar los folios antes detectados en el resumen por grupos
+resumen_por_grupo <- resumen_por_grupo %>%
+  filter(FOLIO %in% resumen_por_macros$FOLIO)
+
+#Ver resumen
+#glimpse(resumen_por_grupo)
+
+#############################
+
+
+#6. ESTANDARIZAR CON Z-SCORE
+
+# Transformar el resumen por grupo a formato ancho: cada grupo es columna
+resumen_wide <- resumen_por_grupo %>%
+  select(FOLIO, grupo, pct_energia_grupo) %>%
+  pivot_wider(names_from = grupo, values_from = pct_energia_grupo)
+
+# Estandarizar con Z-score (media 0, SD 1) por grupo
+resumen_z <- resumen_wide %>%
+  mutate(across(-FOLIO, ~ scale(.)[,1])) # scale devuelve matriz, usamos [,1] para vector
+
+# Ver resultado
+head(resumen_z)
+
+#Revisar NaN que pueden afectar los análisis posteriores
+# Detectar valores no finitos
+sum(!is.finite(as.matrix(resumen_z[,-1])))
+
+# Reemplazar NaN / Inf / -Inf por 0 en todas las columnas excepto FOLIO
+resumen_z <- resumen_z %>%
+  mutate(across(-FOLIO, ~ ifelse(!is.finite(.), 0, .)))
+
+# Verificar si quedó limpio
+sum(!is.finite(as.matrix(resumen_z[,-1])))
+
+
+
+############################################################################################
+
+##ANALISIS FACTORIAL EXPLORATORIO##
+
+#1. Verificar que la matriz de correlación de datos es factorizable
+
+#Datos para el análisis
+datos_af <- resumen_z%>% 
+  select(-FOLIO)
+
+#Verificar que todas las variables sean númericas
+str(datos_af)
+
+#Matriz de correlación de Pearson
+mat_cor<-cor(datos_af, use = "pairwise.complete.obs")
+
+ggcorrplot(
+  mat_cor,
+  hc.order = TRUE,
+  type = "lower",
+  lab = TRUE,
+  lab_size = 3,
+  colors = c("blue", "white", "red"),
+  title = "Matriz de correlación de Pearson",
+  ggtheme = theme_minimal()
+)
+
+#Prueba de Bartlett
+p_esf <- cortest.bartlett((mat_cor), n= 3382)
+p_esf$p.value #Dato que el valor de p-value=0, rechazamos la hipotesis nula y concluimos que las variables efectivamente estan correlacionadas entre si
+
+#Kaiser-Meyer-Olkin (KMO)
+KMO(mat_cor) #El valor global, entre mas cercano a 1 nos indica que es adecuado realizar el EFA.
+KMO (resumen_z[,-1])
+
+#De manera directa o no, el KMO=0.5→ Débil, el análisis factorial puede no ser apropiado, toca revisar otro método o estructura de los grupos de alimentos aunque hay autores que han usado
+#este valor para continuar.
+
+###PASO 2: ESCOGER UN METODO PARA EXTRAER FACTORES###
+
+#Con el codigo previo el EFA forzado con los datos, resulta problemático por la baja KMO, se observaron
+#comunalidades extrañas y matriz casi singular*. El programa cambio los valores negativos por 0 ya que la
+#correlación tiene colinealidad, hay variables no relacionadas y  comunidalidades bajas.
+
+
+# EFA forzado con rotación varimax
+
+# Rotación para facilitar interpretación (4 factores)
+m1_rot <- fa(mat_cor, 
+             nfactor = 4,        # número de factores que ya decidiste
+             fm = "minres",      # método de extracción
+             rotate = "varimax", # rotación ortogonal
+             max.iter = 1000,
+             n.obs = 3382)
+
+# Mostrar cargas factoriales ≥ 0.3 para facilitar lectura
+print(m1_rot$loadings, cutoff = 0.3)
+
+# Comunidades de cada variable
+m1_rot$communality
+
+# Suma de cargas y proporción de varianza explicada
+m1_rot$Vaccounted
+
+# Rotación para facilitar interpretación (2 factores)
+m2_rot <- fa(mat_cor,
+             nfactor = 2,        # ahora solo 2 factores
+             fm = "minres",      # método de extracción
+             rotate = "varimax", # rotación ortogonal
+             max.iter = 1000,
+             n.obs = 3382)
+
+# Mostrar cargas factoriales ≥ 0.3
+print(m2_rot$loadings, cutoff = 0.3)
+
+# Comunidades de cada variable
+m2_rot$communality
+
+# Suma de cargas y proporción de varianza explicada
+m2_rot$Vaccounted
+
+# Rotación para facilitar interpretación (3 factores)
+m3_rot <- fa(mat_cor,
+             nfactor = 3,        # ahora solo 3 factores
+             fm = "minres",      # método de extracción
+             rotate = "varimax", # rotación ortogonal
+             max.iter = 1000,
+             n.obs = 3382)
+
+# Mostrar cargas factoriales ≥ 0.3
+print(m2_rot$loadings, cutoff = 0.3)
+
+# Comunidades de cada variable
+m3_rot$communality
+
+# Suma de cargas y proporción de varianza explicada
+m3_rot$Vaccounted
+
+#Comparar comunalidades entre los modelos
+# Comunidades ordenadas de mayor a menor
+c1 <- sort(m1_rot$communality, decreasing = TRUE)
+c2 <- sort(m2_rot$communality, decreasing = TRUE)
+c3 <- sort(m3_rot$communality, decreasing = TRUE)
+
+# Combinar en una tabla para comparación
+comunalidades_comparacion <- cbind(c1, c2, c3)
+colnames(comunalidades_comparacion) <- c("4 Factores", "2 Factores", "3 Factores")
+print(comunalidades_comparacion)
+
+#Comparar unicidades entre los tres modelos
+# Unicidades ordenadas de mayor a menor
+u1 <- sort(m1_rot$uniquenesses, decreasing = TRUE)
+u2 <- sort(m2_rot$uniquenesses, decreasing = TRUE)
+u3 <- sort(m3_rot$uniquenesses, decreasing = TRUE)
+
+# Combinar en tabla
+unicidades_comparacion <- cbind(u1, u2, u3)
+colnames(unicidades_comparacion) <- c("4 Factores", "2 Factores", "3 Factores")
+print(unicidades_comparacion)
+
+#######################################
+
+#Heatmap de las cargas factoriales para visualizar patrones y decidir reagrupaciones
+
+# Preparar datos para heatmap
+
+
+# Función para convertir cargas en dataframe largo
+cargas_a_largo <- function(fa_model, modelo_nombre) {
+  df <- as.data.frame(fa_model$loadings[,])
+  df$variable <- rownames(df)
+  df_long <- df %>%
+    pivot_longer(cols = -variable, names_to = "Factor", values_to = "Carga") %>%
+    mutate(Modelo = modelo_nombre)
+  return(df_long)
+}
+
+# Convertir los tres modelos
+df_m1 <- cargas_a_largo(m1_rot, "4 Factores")
+df_m2 <- cargas_a_largo(m2_rot, "2 Factores")
+df_m3 <- cargas_a_largo(m3_rot, "3 Factores")
+
+# Combinar todos
+df_cargas <- bind_rows(df_m1, df_m2, df_m3)
+
+# Heatmap con ggplot2
+ggplot(df_cargas, aes(x = Factor, y = variable, fill = Carga)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  facet_wrap(~Modelo, ncol = 1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Heatmap de cargas factoriales",
+       fill = "Carga")
+
+
+# Heatmap con etiquetas de carga
+ggplot(df_cargas, aes(x = Factor, y = variable, fill = Carga)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Carga, 2)), size = 3) + # etiquetas con 2 decimales
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  facet_wrap(~Modelo, ncol = 1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Heatmap de cargas factoriales con valores",
+       fill = "Carga")
+
+
+###########################################################
+
+#ANÁLISIS POR COMPONENTES PRINCIPALES#
+
+# Seleccionar solo las columnas numéricas (grupos de alimentos)
+datos_pca <- resumen_z %>% select(-FOLIO)
+
+sum(is.na(datos_pca))      # cuántos NA hay
+sum(!is.finite(as.matrix(datos_pca)))  # cuántos Inf o -Inf
+
+
+# Ejecutar PCA
+pca_result <- prcomp(datos_pca, center = TRUE, scale. = TRUE) # ya están estandarizados, pero scale = TRUE no afecta
+
+# Resumen de la varianza explicada
+summary(pca_result)
+
+# Cargas de los primeros 4 componentes
+cargas_pca <- pca_result$rotation[,1:4]
+print(round(cargas_pca, 2))
+
+
+# Heatmap de cargas PCA (opcional)
+
+# Convertir a formato largo
+df_pca <- as.data.frame(cargas_pca)
+df_pca$variable <- rownames(df_pca)
+df_pca_long <- df_pca %>%
+  pivot_longer(cols = -variable, names_to = "Componente", values_to = "Carga")
+
+# Heatmap
+ggplot(df_pca_long, aes(x = Componente, y = variable, fill = Carga)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Carga,2)), size = 3) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Heatmap de cargas PCA",
+       fill = "Carga")
