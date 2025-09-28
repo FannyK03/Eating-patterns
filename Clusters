@@ -1,0 +1,322 @@
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(psych)
+library(polycor)
+library(ggplot2)
+library(factoextra)
+
+#1.CARGAR BASE 
+
+datos <-read_excel("Tesis/Bases/Tlalpan 2020_LIMPIO_MOD.xlsx", sheet = "datos")
+conversion <-read_excel("Tesis/Bases/Tlalpan 2020_LIMPIO_MOD.xlsx", sheet = "conv")
+
+#Crear una nueva base a partir de las 2 hojas anteriores 
+
+datos_largos <- datos %>%
+  pivot_longer(
+    cols = starts_with("FREC"),
+    names_to = "FREC_ID",
+    values_to = "frecuencia")
+
+datos_nutri <- datos_largos %>%
+  left_join(conversion, by = "FREC_ID")
+
+#2. VERIFICAR NUMERO DE FOLIOS
+
+# Contar cuántas veces se repite cada folio
+conteo_folios <- datos_nutri %>%
+  group_by(FOLIO) %>%
+  summarise(repeticiones = n())
+
+# Ver las primeras filas para revisar
+head(conteo_folios)
+
+# Total de folios únicos
+total_folios <- n_distinct(datos_nutri$FOLIO)
+total_folios
+
+#3. AGRUPAR ALIMENTOS
+
+grupos <- list(
+  lacteos = c("FREC001","FREC002","FREC003","FREC004","FREC005","FREC006","FREC007"),
+  frutas  = c("FREC008","FREC009","FREC010","FREC011","FREC012","FREC013","FREC014","FREC015",
+              "FREC016","FREC017","FREC018","FREC019","FREC020","FREC021","FREC022","FREC023","FREC024","FREC025"),
+  carnes  = c("FREC026","FREC027","FREC028","FREC029","FREC030","FREC031","FREC032","FREC033",
+              "FREC034","FREC035","FREC036","FREC037","FREC038","FREC039","FREC040","FREC041"),
+  verduras= c("FREC042","FREC043","FREC044","FREC045","FREC046","FREC047","FREC048","FREC049",
+              "FREC050","FREC051","FREC052","FREC053","FREC054","FREC055","FREC056","FREC057","FREC058"),
+  leguminosas = c("FREC059","FREC060","FREC061","FREC062","FREC063"),
+  cereales    = c("FREC064","FREC065","FREC066","FREC067","FREC068","FREC069","FREC070","FREC071","FREC072"),
+  golosinas   = c("FREC075","FREC076","FREC077","FREC078","FREC079"),
+  bebidas     = c("FREC080","FREC081","FREC082","FREC083","FREC084","FREC085","FREC086","FREC087","FREC088","FREC089"),
+  grasas      = c("FREC090","FREC091","FREC092","FREC093","FREC094","FREC095","FREC096","FREC097","FREC098","FREC099","FREC100"),
+  antojitos   = c("FREC101","FREC102","FREC103","FREC104")
+)
+
+#Transformar lista de grupos a dataframe largo
+agrupacion <- purrr::imap_dfr(grupos, ~ tibble(FREC_ID = .x, grupo = .y))
+
+#Unir con datos_nutri
+datos_nutri <- datos_nutri %>%
+  left_join(agrupacion, by = "FREC_ID") %>%
+  relocate(grupo, .after = `ALIMENTO`)
+
+#Verificar grupos y número de FREC_ID para cada uno
+#FREC_agru <- unlist(grupos)
+#FREC_sin_grupo <- setdiff(unique(datos_nutri$FREC_ID), FREC_agru)
+#FREC_sin_grupo
+#length(FREC_sin_grupo)   # cuántos sin agrupar
+#table(FREC_sin_grupo)    # frecuencias (si repiten en varias filas)
+
+
+#4. CALCULAR CONSUMO DIARIO Y KCAL (CONVERSIÓN DE MACRONUTRIENTES) 
+
+#Calcular consumo diario de cada alimento por participante
+datos_nutri <- datos_nutri %>%
+  mutate(
+    # Consumo en gramos por día
+    Prot_g_dia  = frecuencia * `Prot_CFC_(g)`,
+    Lip_g_dia   = frecuencia * `Lip_CFC_(g)`,
+    CHO_g_dia   = frecuencia * `CHO_CFC_(g)`,
+    EtOH_g_dia  = frecuencia * `EtOH_CFC_(g)`,
+    
+    # Consumo en kcal usando factores de conversión
+    Prot_kcal_dia = Prot_g_dia * 4,
+    Lip_kcal_dia  = Lip_g_dia * 9,
+    CHO_kcal_dia  = CHO_g_dia * 4,
+    EtOH_kcal_dia = EtOH_g_dia * 7,
+    
+    # Total de kcal diarias por alimento 
+    Kcal_total_dia = Prot_kcal_dia + Lip_kcal_dia + CHO_kcal_dia + EtOH_kcal_dia
+  )
+
+#5. RESUMENES POR PARTICIPANTE (MACROS Y GRUPOS DE ALIMENTOS)
+
+#Desglose de macronutrientes por gramos y Kcal diarios, así como la suma total de energía.
+
+resumen_por_macros <- datos_nutri %>%
+  group_by(FOLIO) %>%
+  summarise(
+    
+    #Totales en gramos
+    Prot_g_dia_total =sum(Prot_g_dia, na.rm = TRUE),
+    Lip_g_dia_total  =sum(Lip_g_dia, na.rm = TRUE),
+    CHO_g_dia_total  =sum(CHO_g_dia, na.rm = TRUE),
+    EtOH_g_dia_total =sum(EtOH_g_dia, na.rm = TRUE),
+    
+    #Totales en kcal
+    Prot_kcal_dia_total =sum(Prot_kcal_dia, na.rm = TRUE),
+    Lip_kcal_dia_total  =sum(Lip_kcal_dia, na.rm = TRUE),
+    CHO_kcal_dia_total  =sum(CHO_kcal_dia, na.rm = TRUE),
+    EtOH_kcal_dia_total =sum(EtOH_kcal_dia, na.rm = TRUE),
+    
+    #Energía total de todos los alimentos
+    Kcal_total_dia_alimentos =sum(Kcal_total_dia, na.rm = TRUE)
+    
+  )
+
+
+#Revisar si hay Energía total igual a cero
+resumen_por_macros %>%
+filter(is.na(Kcal_total_dia_alimentos) | Kcal_total_dia_alimentos == 0) %>%
+select(FOLIO, Kcal_total_dia_alimentos) 
+
+
+#Desglose por grupo de alimentos, kcal y energía total de cada uno.
+
+resumen_por_grupo <- datos_nutri %>%
+  group_by(FOLIO, grupo) %>%
+  summarise(
+    
+    #Totales en gramos
+    Prot_g   = sum(Prot_g_dia, na.rm = TRUE),
+    Lip_g    = sum(Lip_g_dia, na.rm = TRUE),
+    CHO_g    = sum(CHO_g_dia, na.rm = TRUE),
+    EtOH_g   = sum(EtOH_g_dia, na.rm = TRUE),
+    
+    #Totales en kcal
+    Prot_kcal_dia =sum(Prot_kcal_dia, na.rm = TRUE),
+    Lip_kcal_dia  =sum(Lip_kcal_dia, na.rm = TRUE),
+    CHO_kcal_dia  =sum(CHO_kcal_dia, na.rm = TRUE),
+    EtOH_kcal_dia =sum(EtOH_kcal_dia, na.rm = TRUE),
+    
+    #Energía total de todos los alimentos
+    Energia_total_grupo = sum(Kcal_total_dia, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% #Agregar energía total del participante (que ya se tiene)
+  
+  left_join(
+    resumen_por_macros %>%
+      select(FOLIO,Kcal_total_dia_alimentos),
+    by = "FOLIO"
+  ) %>% #Calcular porcentaje de  distribución energética del grupo
+  mutate(
+    pct_energia_grupo = (Energia_total_grupo/Kcal_total_dia_alimentos)* 100
+  )
+
+#Ver resumen
+#glimpse(resumen_por_grupo)
+
+#6. ESTANDARIZAR CON Z-SCORE
+
+# Transformar el resumen por grupo a formato ancho: cada grupo es columna
+resumen_wide <- resumen_por_grupo %>%
+  select(FOLIO, grupo, pct_energia_grupo) %>%
+  pivot_wider(names_from = grupo, values_from = pct_energia_grupo)
+
+# Estandarizar con Z-score (media 0, SD 1) por grupo
+resumen_z <- resumen_wide %>%
+  mutate(across(-FOLIO, ~ scale(.)[,1])) # scale devuelve matriz, usamos [,1] para vector
+
+# Ver resultado
+head(resumen_z)
+
+#Revisar NaN que pueden afectar los análisis posteriores
+# Detectar valores no finitos
+sum(!is.finite(as.matrix(resumen_z[,-1])))
+
+# Reemplazar NaN / Inf / -Inf por 0 en todas las columnas excepto FOLIO
+resumen_z <- resumen_z %>%
+  mutate(across(-FOLIO, ~ ifelse(!is.finite(.), 0, .)))
+
+# Verificar si quedó limpio
+sum(!is.finite(as.matrix(resumen_z[,-1])))
+
+############################################################################################
+
+###ANÁLISIS POR CONGLOMERADOS###
+
+### PASO 1: Preparar datos ###
+# Excluimos FOLIO si está como primera columna
+datos_cluster <- resumen_z %>% select(-FOLIO)
+
+### PASO 2: Matriz de distancias ###
+dist_matrix <- dist(datos_cluster, method = "euclidean")
+
+### PASO 3: Clustering jerárquico ###
+hc <- hclust(dist_matrix, method = "ward.D2")
+
+# Dendrograma
+plot(hc, labels = FALSE, hang = -1, cex = 0.5,
+     main = "Dendrograma de conglomerados (Ward.D2)")
+
+# Dibujar rectángulos para k clusters
+rect.hclust(hc, k = 4, border = "red")  # Ajusta k según el dendrograma
+
+### PASO 4: Asignar clusters ###
+clusters_hc <- cutree(hc, k = 4)
+table(clusters_hc)
+
+### PASO 5: Describir clusters ###
+resumen_clusters <- resumen_z %>%
+  mutate(cluster = clusters_hc)
+
+# Medias por cluster
+aggregate(. ~ cluster, data = resumen_clusters %>% select(-FOLIO), mean)
+
+### PASO 6: Validación con K-means ###
+set.seed(123)
+kmeans_result <- kmeans(datos_cluster, centers = 4, nstart = 25)
+
+# Distribución de participantes
+table(kmeans_result$cluster)
+
+# Medias por cluster
+aggregate(datos_cluster, by = list(cluster = kmeans_result$cluster), mean)
+
+# Visualización (factoextra)
+fviz_cluster(kmeans_result, data = datos_cluster,
+             palette = "jco", geom = "point",
+             main = "Clusters por K-means", repel = TRUE)
+
+#################################
+#K-MEANS
+
+#CREAR NUEVA BASE CON LAS VARIABLES DE GRUPO DE ALIMENTOS
+datos_idh <- na.omit(resumen_z) #borrar casos perdidos
+sub_idh <- datos_idh %>%
+  select(,-FOLIO)
+
+#Revisar distribución en los datos para identificar escala de medición y si son compatibles
+boxplot(sub_idh) #Las variables cuentan con una escala homogenea
+sub_idh_z <- scale(sub_idh) # standardize variables 
+boxplot(sub_idh_z)
+
+#BUSQUEDA DE NÚMERO DE CLUSTERS
+
+wss <- (nrow(sub_idh_z) - 1) * sum(apply(sub_idh_z, 2, var)) # cálculo de la suma de cuadrados de las varianzas
+for (i in 2:15) wss[i] <- sum(kmeans(sub_idh_z,
+                                     centers = i) $ withinss)
+plot(1:15, wss, 
+     type = "b", 
+     xlab = "Cantidad de Clusters",
+     ylab="Suma de cuadrados dentro de grupos") #gráfico para la búsqueda del codo
+
+#Agregar a los clusters los casos
+
+fit1 <- kmeans(sub_idh_z, 4) # ajustar 4 clusters a los casos
+sub_idh_z <- data.frame(sub_idh_z, 
+                        fit1 $ cluster) #añadir el cluster al data frame
+aggregate(sub_idh, #selección de las variables originales
+          by = list(sub_idh_z $fit1.cluster), #selección de la columna con clusters `k means`
+          FUN = mean) # calcular las medias de las variables agregadas por cada cluster
+
+#Revisar comportamiento de las variables dentro de los cluster
+
+table(sub_idh_z $ fit1.cluster)
+
+#Analizar variable "carnes" desagregada en los 4 clusters
+sub_idh_z %>%
+  ggplot(aes(y = carnes, x = as.factor(fit1.cluster))) +
+  geom_boxplot()
+
+#Analizar variable "grasas" desagregada en los 4 clusters
+sub_idh_z %>%
+  ggplot(aes(y = grasas, x = as.factor(fit1.cluster))) +
+  geom_boxplot()
+
+#Interacción entre el agrupamiento y 2 variables
+sub_idh_z %>%
+  ggplot(aes(verduras,frutas)) +
+  geom_point(aes(color = as.factor(fit1.cluster)))
+
+#MÉTODO JERÁRQUICO
+
+#Calcular las distancias existentes entre los casos
+d <- dist(sub_idh_z[, 1:4],  #uso del data fame estandarizado
+          method = "euclidean") # genera una matriz de distancias
+fit2 <- hclust(d, #aplicación del método jerárquico
+               method = "ward.D") #criterio de agregación
+
+#Construcción del dendograma
+plot(fit2) # crear dendograma
+rect.hclust(fit2, 
+            k = 4, #definición de la cantidad de cluster a mapear en el dendograma
+            border = "red") #definición del color de las rectas que separan a los clusters
+
+#Integración de casos a clusters jeráquicos
+grupos_j <- cutree(fit2, 
+                   k = 4) # se distribuyen los casos a partir de los clusters definidos
+sub_idh_z <- data.frame(sub_idh_z, 
+                        grupos_j) # se añaden las clasificaciones jerárquicas al data frame original
+table(sub_idh_z $ grupos_j)
+
+#Descripción de las variables por categorías jerárquicas
+aggregate(sub_idh, #selección de variables originales
+          by = list(sub_idh_z $ grupos_j), #selección de columna con clusters jerárquicos
+          FUN = mean) # calcular las medias de las variables agregadas por cada cluster
+
+#MÉTODOS DE AGRUPAMIENTO BASADO EN MODELOS
+
+#Construcción de los modelos
+library(mclust)
+BIC <- mclustBIC(sub_idh_z[, 1:4]) # selección de las variables estandarizadas
+plot(BIC)
+
+#Evaluación de los descriptivos de los modelos
+mod1 <- Mclust(sub_idh, x = BIC)
+summary(mod1, parameters = TRUE)
+
+plot(mod1, what = "classification")
