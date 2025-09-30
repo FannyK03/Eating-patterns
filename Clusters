@@ -1,11 +1,9 @@
 library(readxl)
 library(tidyverse)
-library(dplyr)
-library(tidyr)
 library(psych)
-library(polycor)
-library(ggplot2)
 library(factoextra)
+library(mclust)
+library(cluster)
 
 #1.CARGAR BASE 
 
@@ -188,135 +186,104 @@ sum(!is.finite(as.matrix(resumen_z[,-1])))
 
 ###ANÁLISIS POR CONGLOMERADOS###
 
-### PASO 1: Preparar datos ###
+# 1. Preparar datos 
+
+#Revisar la estructura del data.frame
+str(resumen_z)
+
 # Excluimos FOLIO si está como primera columna
 datos_cluster <- resumen_z %>% select(-FOLIO)
 
-### PASO 2: Matriz de distancias ###
-dist_matrix <- dist(datos_cluster, method = "euclidean")
+#Excluir datos perdidos
+datos_alim <- na.omit(datos_cluster) # borrado de casos perdidos
 
-### PASO 3: Clustering jerárquico ###
-hc <- hclust(dist_matrix, method = "ward.D2")
 
-# Dendrograma
-plot(hc, labels = FALSE, hang = -1, cex = 0.5,
-     main = "Dendrograma de conglomerados (Ward.D2)")
+# 2.Se revisan las tres técnicas para el análisis de clusters
 
-# Dibujar rectángulos para k clusters
-rect.hclust(hc, k = 4, border = "red")  # Ajusta k según el dendrograma
+# 2.1. Clustering K-means
 
-### PASO 4: Asignar clusters ###
-clusters_hc <- cutree(hc, k = 4)
-table(clusters_hc)
+#Revisar que las distribución de las variables son comparables o requieren un ajuste en las escalas.
+boxplot(datos_alim)
 
-### PASO 5: Describir clusters ###
-resumen_clusters <- resumen_z %>%
-  mutate(cluster = clusters_hc)
+#scale() #De ser necesario se estandariza
 
-# Medias por cluster
-aggregate(. ~ cluster, data = resumen_clusters %>% select(-FOLIO), mean)
-
-### PASO 6: Validación con K-means ###
-set.seed(123)
-kmeans_result <- kmeans(datos_cluster, centers = 4, nstart = 25)
-
-# Distribución de participantes
-table(kmeans_result$cluster)
-
-# Medias por cluster
-aggregate(datos_cluster, by = list(cluster = kmeans_result$cluster), mean)
-
-# Visualización (factoextra)
-fviz_cluster(kmeans_result, data = datos_cluster,
-             palette = "jco", geom = "point",
-             main = "Clusters por K-means", repel = TRUE)
-
-#################################
-#K-MEANS
-
-#CREAR NUEVA BASE CON LAS VARIABLES DE GRUPO DE ALIMENTOS
-datos_idh <- na.omit(resumen_z) #borrar casos perdidos
-sub_idh <- datos_idh %>%
-  select(,-FOLIO)
-
-#Revisar distribución en los datos para identificar escala de medición y si son compatibles
-boxplot(sub_idh) #Las variables cuentan con una escala homogenea
-sub_idh_z <- scale(sub_idh) # standardize variables 
-boxplot(sub_idh_z)
-
-#BUSQUEDA DE NÚMERO DE CLUSTERS
-
-wss <- (nrow(sub_idh_z) - 1) * sum(apply(sub_idh_z, 2, var)) # cálculo de la suma de cuadrados de las varianzas
-for (i in 2:15) wss[i] <- sum(kmeans(sub_idh_z,
+#Determinar número de clusters
+wss <- (nrow(datos_alim) - 1) * sum(apply(datos_alim, 2, var)) # cálculo de la suma de cuadrados de las varianzas
+for (i in 2:15) wss[i] <- sum(kmeans(datos_alim,
                                      centers = i) $ withinss)
 plot(1:15, wss, 
      type = "b", 
      xlab = "Cantidad de Clusters",
      ylab="Suma de cuadrados dentro de grupos") #gráfico para la búsqueda del codo
+abline(v = codo, col="red", lty=2, lwd=2)
 
-#Agregar a los clusters los casos
+# Detectar codo automático
+diff_wss <- diff(wss)
+codo <- which.min(diff(diff_wss)) + 1
+codo #Se observan 3 clusters
 
-fit1 <- kmeans(sub_idh_z, 4) # ajustar 4 clusters a los casos
-sub_idh_z <- data.frame(sub_idh_z, 
+#Asignar a cada caso  a cada uno de los cluster
+fit1 <- kmeans(datos_alim, 3) # ajustar 3 clusters a los casos
+datos_alim <- data.frame(datos_alim, 
                         fit1 $ cluster) #añadir el cluster al data frame
-aggregate(sub_idh, #selección de las variables originales
-          by = list(sub_idh_z $fit1.cluster), #selección de la columna con clusters `k means`
+aggregate(datos_alim, #selección de las variables originales
+          by = list(datos_alim $fit1.cluster), #selección de la columna con clusters `k means`
           FUN = mean) # calcular las medias de las variables agregadas por cada cluster
+table(datos_alim $ fit1.cluster)
 
-#Revisar comportamiento de las variables dentro de los cluster
-
-table(sub_idh_z $ fit1.cluster)
-
-#Analizar variable "carnes" desagregada en los 4 clusters
-sub_idh_z %>%
-  ggplot(aes(y = carnes, x = as.factor(fit1.cluster))) +
-  geom_boxplot()
-
-#Analizar variable "grasas" desagregada en los 4 clusters
-sub_idh_z %>%
+#Usar última variable (fit1.cluster) para avanzar en el análisis de los casos y las variables orignales.
+#Analizar el comportamiento de una variable  desagregada entre los 3 grupos o clusters generados previamente.
+datos_alim %>%
   ggplot(aes(y = grasas, x = as.factor(fit1.cluster))) +
   geom_boxplot()
 
-#Interacción entre el agrupamiento y 2 variables
-sub_idh_z %>%
-  ggplot(aes(verduras,frutas)) +
+#Analizar el comportamiento de dos variables
+datos_alim %>%
+  ggplot(aes(grasas, carnes)) +
   geom_point(aes(color = as.factor(fit1.cluster)))
 
-#MÉTODO JERÁRQUICO
 
-#Calcular las distancias existentes entre los casos
-d <- dist(sub_idh_z[, 1:4],  #uso del data fame estandarizado
+# 2.2. Método Jerárquico
+
+#Calcular las distancias existentes entre los casos y agrupar de manera jerárquica.
+d <- dist(datos_alim[, 1:4],  #uso del data fame estandarizado
           method = "euclidean") # genera una matriz de distancias
 fit2 <- hclust(d, #aplicación del método jerárquico
                method = "ward.D") #criterio de agregación
 
-#Construcción del dendograma
+#Construir dentograma o gráfica de árbol
 plot(fit2) # crear dendograma
 rect.hclust(fit2, 
-            k = 4, #definición de la cantidad de cluster a mapear en el dendograma
+            k = 3, #definición de la cantidad de cluster a mapear en el dendograma
             border = "red") #definición del color de las rectas que separan a los clusters
 
-#Integración de casos a clusters jeráquicos
+#Integrar casos a cluster jerárquicos
 grupos_j <- cutree(fit2, 
-                   k = 4) # se distribuyen los casos a partir de los clusters definidos
-sub_idh_z <- data.frame(sub_idh_z, 
+                   k = 3) # se distribuyen los casos a partir de los clusters definidos
+datos_alim <- data.frame(datos_alim, 
                         grupos_j) # se añaden las clasificaciones jerárquicas al data frame original
-table(sub_idh_z $ grupos_j)
+table(datos_alim $ grupos_j)
 
-#Descripción de las variables por categorías jerárquicas
-aggregate(sub_idh, #selección de variables originales
-          by = list(sub_idh_z $ grupos_j), #selección de columna con clusters jerárquicos
+#Descripción de las variables por categorías jerárquicas, para identificar las características internas de cada grupo.
+
+aggregate(datos_cluster, #selección de variables originales
+          by = list(datos_alim $ grupos_j), #selección de columna con clusters jerárquicos
           FUN = mean) # calcular las medias de las variables agregadas por cada cluster
 
-#MÉTODOS DE AGRUPAMIENTO BASADO EN MODELOS
 
-#Construcción de los modelos
-library(mclust)
-BIC <- mclustBIC(sub_idh_z[, 1:4]) # selección de las variables estandarizadas
+# 2.3. Clustering basado en modelos
+
+summary(datos_alim)
+apply(datos_alim, 2, sd) #Las variables son casi idénticas (correlación ~ 1), por lo que la matriz de covarianza se vuelve singular y Mclust no puede estimarla.
+cor(datos_alim) #Se observa pocas correlaciones, por lo que no se continua con este modelo
+
+#Se basa en los análisis anteriores, en la revisión de resultados gráficos.
+BIC <- mclustBIC(datos_alim[, 1:4]) # selección de las variables estandarizadas
 plot(BIC)
 
 #Evaluación de los descriptivos de los modelos
-mod1 <- Mclust(sub_idh, x = BIC)
+mod1 <- Mclust(datos_alim, x = BIC)
 summary(mod1, parameters = TRUE)
 
+#Revisar los agrupamientos de manera visual
 plot(mod1, what = "classification")
