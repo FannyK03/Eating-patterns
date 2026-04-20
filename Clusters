@@ -4,11 +4,21 @@ library(psych)
 library(factoextra)
 library(mclust)
 library(cluster)
+library(patchwork)
+library(cowplot)
+library(broom)
+library(car)
+
+set.seed(123)
 
 #1.CARGAR BASE 
 
-datos <-read_excel("Tesis/Bases/Tlalpan 2020_LIMPIO_MOD.xlsx", sheet = "datos")
-conversion <-read_excel("Tesis/Bases/Tlalpan 2020_LIMPIO_MOD.xlsx", sheet = "conv")
+datos <- read_excel("Bases/Tlalpan 2020_LIMPIO_MOD.xlsx", 
+                       sheet = "datos") %>%
+  select( -c(FREC073, FREC074))
+
+conversion <- read_excel("Bases/Tlalpan 2020_LIMPIO_MOD.xlsx", 
+                         sheet = "conv")
 
 #Crear una nueva base a partir de las 2 hojas anteriores 
 
@@ -37,24 +47,24 @@ total_folios
 
 #3. AGRUPAR ALIMENTOS
 
-grupos <- list(
-  lacteos = c("FREC001","FREC002","FREC003","FREC004","FREC005","FREC006","FREC007"),
-  frutas  = c("FREC008","FREC009","FREC010","FREC011","FREC012","FREC013","FREC014","FREC015",
+GRUPOS <- list(
+  LACTEOS = c("FREC001","FREC002","FREC003","FREC004","FREC005","FREC006","FREC007"),
+  FRUTAS  = c("FREC008","FREC009","FREC010","FREC011","FREC012","FREC013","FREC014","FREC015",
               "FREC016","FREC017","FREC018","FREC019","FREC020","FREC021","FREC022","FREC023","FREC024","FREC025"),
-  carnes  = c("FREC026","FREC027","FREC028","FREC029","FREC030","FREC031","FREC032","FREC033",
+  CARNES  = c("FREC026","FREC027","FREC028","FREC029","FREC030","FREC031","FREC032","FREC033",
               "FREC034","FREC035","FREC036","FREC037","FREC038","FREC039","FREC040","FREC041"),
-  verduras= c("FREC042","FREC043","FREC044","FREC045","FREC046","FREC047","FREC048","FREC049",
+  VERDURAS= c("FREC042","FREC043","FREC044","FREC045","FREC046","FREC047","FREC048","FREC049",
               "FREC050","FREC051","FREC052","FREC053","FREC054","FREC055","FREC056","FREC057","FREC058"),
-  leguminosas = c("FREC059","FREC060","FREC061","FREC062","FREC063"),
-  cereales    = c("FREC064","FREC065","FREC066","FREC067","FREC068","FREC069","FREC070","FREC071","FREC072"),
-  golosinas   = c("FREC075","FREC076","FREC077","FREC078","FREC079"),
-  bebidas     = c("FREC080","FREC081","FREC082","FREC083","FREC084","FREC085","FREC086","FREC087","FREC088","FREC089"),
-  grasas      = c("FREC090","FREC091","FREC092","FREC093","FREC094","FREC095","FREC096","FREC097","FREC098","FREC099","FREC100"),
-  antojitos   = c("FREC101","FREC102","FREC103","FREC104")
+  LEGUMINOSAS = c("FREC059","FREC060","FREC061","FREC062","FREC063"),
+  CEREALES    = c("FREC064","FREC065","FREC066","FREC067","FREC068","FREC069","FREC070","FREC071","FREC072"),
+  GOLOSINAS   = c("FREC075","FREC076","FREC077","FREC078","FREC079"),
+  BEBIDAS     = c("FREC080","FREC081","FREC082","FREC083","FREC084","FREC085","FREC086","FREC087","FREC088","FREC089"),
+  GRASAS      = c("FREC090","FREC091","FREC092","FREC093","FREC094","FREC095","FREC096","FREC097","FREC098","FREC099","FREC100"),
+  ANTOJITOS   = c("FREC101","FREC102","FREC103","FREC104")
 )
 
 #Transformar lista de grupos a dataframe largo
-agrupacion <- purrr::imap_dfr(grupos, ~ tibble(FREC_ID = .x, grupo = .y))
+agrupacion <- purrr::imap_dfr(GRUPOS, ~ tibble(FREC_ID = .x, grupo = .y))
 
 #Unir con datos_nutri
 datos_nutri <- datos_nutri %>%
@@ -62,11 +72,11 @@ datos_nutri <- datos_nutri %>%
   relocate(grupo, .after = `ALIMENTO`)
 
 #Verificar grupos y número de FREC_ID para cada uno
-#FREC_agru <- unlist(grupos)
-#FREC_sin_grupo <- setdiff(unique(datos_nutri$FREC_ID), FREC_agru)
-#FREC_sin_grupo
-#length(FREC_sin_grupo)   # cuántos sin agrupar
-#table(FREC_sin_grupo)    # frecuencias (si repiten en varias filas)
+FREC_agru <- unlist(GRUPOS)
+FREC_sin_grupo <- setdiff(unique(datos_nutri$FREC_ID), FREC_agru)
+FREC_sin_grupo
+length(FREC_sin_grupo)   # cuántos sin agrupar
+table(FREC_sin_grupo)    # frecuencias (si repiten en varias filas)
 
 
 #4. CALCULAR CONSUMO DIARIO Y KCAL (CONVERSIÓN DE MACRONUTRIENTES) 
@@ -121,7 +131,6 @@ resumen_por_macros %>%
 filter(is.na(Kcal_total_dia_alimentos) | Kcal_total_dia_alimentos == 0) %>%
 select(FOLIO, Kcal_total_dia_alimentos) 
 
-
 #Desglose por grupo de alimentos, kcal y energía total de cada uno.
 
 resumen_por_grupo <- datos_nutri %>%
@@ -155,7 +164,32 @@ resumen_por_grupo <- datos_nutri %>%
   )
 
 #Ver resumen
-#glimpse(resumen_por_grupo)
+glimpse(resumen_por_grupo)
+
+#Gráficar distribución 
+
+resumen_por_grupo %>%
+  group_by(grupo) %>%
+  summarise(media_pct = mean(pct_energia_grupo, na.rm = TRUE),
+            sd_pct = sd(pct_energia_grupo, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(grupo, media_pct), y = media_pct, fill = grupo)) +
+  geom_col(alpha = 0.8) +
+  geom_errorbar(aes(ymin = media_pct - sd_pct, ymax = media_pct + sd_pct),
+                width = 0.25, color = "gray30") +
+  labs(title = "Contribución promedio de energía por grupo de alimentos",
+       x = "Grupo de alimentos",
+       y = "Promedio de energía (%)") +
+  coord_flip() +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", hjust = 0.5)
+  )
+
+#Guardar gráfico, sólo se debe agregar "energia_por_grupo_boxplot.png <-" en el paso anterior
+#ggsave("energia_por_grupo_boxplot.png", width = 9, height = 6, dpi = 300, bg = "white")
+
+
 
 #6. ESTANDARIZAR CON Z-SCORE
 
@@ -197,93 +231,546 @@ datos_cluster <- resumen_z %>% select(-FOLIO)
 #Excluir datos perdidos
 datos_alim <- na.omit(datos_cluster) # borrado de casos perdidos
 
-
-# 2.Se revisan las tres técnicas para el análisis de clusters
+# 2. Análisis de clusters
 
 # 2.1. Clustering K-means
 
 #Revisar que las distribución de las variables son comparables o requieren un ajuste en las escalas.
+#datos_alim2 <- scale(datos_alim) #De ser necesario se estandariza
 boxplot(datos_alim)
 
-#scale() #De ser necesario se estandariza
+#Debido a que el gráfico es muy grande, se guardará en png para su visualización.
+png("boxplot_datos_alim.png", width = 1200, height = 800, res = 120)
+boxplot(datos_alim,
+        main = "Distribución de variables estandarizadas por grupo",
+        las = 2,               # gira etiquetas del eje X
+        cex.axis = 0.8,        # tamaño de texto de ejes
+        col = "lightblue")     # color de cajas
+dev.off()
+getwd()
+
 
 #Determinar número de clusters
 wss <- (nrow(datos_alim) - 1) * sum(apply(datos_alim, 2, var)) # cálculo de la suma de cuadrados de las varianzas
-for (i in 2:15) wss[i] <- sum(kmeans(datos_alim,
-                                     centers = i) $ withinss)
+for (i in 2:15) wss[i] <- sum(kmeans(datos_alim,centers = i) $ withinss)
+
+
+#Plot
 plot(1:15, wss, 
      type = "b", 
      xlab = "Cantidad de Clusters",
      ylab="Suma de cuadrados dentro de grupos") #gráfico para la búsqueda del codo
-abline(v = codo, col="red", lty=2, lwd=2)
 
-# Detectar codo automático
-diff_wss <- diff(wss)
-codo <- which.min(diff(diff_wss)) + 1
-codo #Se observan 3 clusters
-
-#Asignar a cada caso  a cada uno de los cluster
-fit1 <- kmeans(datos_alim, 3) # ajustar 3 clusters a los casos
-datos_alim <- data.frame(datos_alim, 
-                        fit1 $ cluster) #añadir el cluster al data frame
-aggregate(datos_alim, #selección de las variables originales
-          by = list(datos_alim $fit1.cluster), #selección de la columna con clusters `k means`
-          FUN = mean) # calcular las medias de las variables agregadas por cada cluster
-table(datos_alim $ fit1.cluster)
-
-#Usar última variable (fit1.cluster) para avanzar en el análisis de los casos y las variables orignales.
-#Analizar el comportamiento de una variable  desagregada entre los 3 grupos o clusters generados previamente.
-datos_alim %>%
-  ggplot(aes(y = grasas, x = as.factor(fit1.cluster))) +
-  geom_boxplot()
-
-#Analizar el comportamiento de dos variables
-datos_alim %>%
-  ggplot(aes(grasas, carnes)) +
-  geom_point(aes(color = as.factor(fit1.cluster)))
+## 2.1.1 Método del Codo (WSS)
+grafico_codo <- fviz_nbclust(datos_alim, kmeans, method = "wss", k.max = 12,
+                             linecolor = "#0073C2FF") +
+  geom_point(size = 3, color = "#0073C2FF") +
+  geom_vline(xintercept = 8, linetype = "dashed", color = "red", linewidth = 1) +
+  labs(title = "Método del Codo (K-means)",
+       x = "Número de clusters (k)",
+       y = "Suma de cuadrados intra-cluster (WSS)") +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA),
+    panel.grid.major = element_line(color = "gray40"),
+    panel.grid.minor = element_blank(),
+    axis.text = element_text(color = "black"),
+    axis.title = element_text(color = "black"),
+    plot.title = element_text(face = "bold", color = "black", hjust = 0.5)
+  )
 
 
-# 2.2. Método Jerárquico
-
-#Calcular las distancias existentes entre los casos y agrupar de manera jerárquica.
-d <- dist(datos_alim[, 1:4],  #uso del data fame estandarizado
-          method = "euclidean") # genera una matriz de distancias
-fit2 <- hclust(d, #aplicación del método jerárquico
-               method = "ward.D") #criterio de agregación
-
-#Construir dentograma o gráfica de árbol
-plot(fit2) # crear dendograma
-rect.hclust(fit2, 
-            k = 3, #definición de la cantidad de cluster a mapear en el dendograma
-            border = "red") #definición del color de las rectas que separan a los clusters
-
-#Integrar casos a cluster jerárquicos
-grupos_j <- cutree(fit2, 
-                   k = 3) # se distribuyen los casos a partir de los clusters definidos
-datos_alim <- data.frame(datos_alim, 
-                        grupos_j) # se añaden las clasificaciones jerárquicas al data frame original
-table(datos_alim $ grupos_j)
-
-#Descripción de las variables por categorías jerárquicas, para identificar las características internas de cada grupo.
-
-aggregate(datos_cluster, #selección de variables originales
-          by = list(datos_alim $ grupos_j), #selección de columna con clusters jerárquicos
-          FUN = mean) # calcular las medias de las variables agregadas por cada cluster
+## 2.1.2 Método del Silhouette 
+grafico_silhouette <- fviz_nbclust(datos_alim, kmeans, method = "silhouette", k.max = 12,
+                                   linecolor = "#E69F00") +
+  geom_point(size = 3, color = "#E69F00") +
+  labs(title = "Método del Silhouette (K-means)",
+       x = "Número de clusters (k)",
+       y = "Anchura promedio del silhouette") +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA),
+    panel.grid.major = element_line(color = "gray40"),
+    panel.grid.minor = element_blank(),
+    axis.text = element_text(color = "black"),
+    axis.title = element_text(color = "black"),
+    plot.title = element_text(face = "bold", color = "black", hjust = 0.5)
+  )
 
 
-# 2.3. Clustering basado en modelos
+## 2.1.3 Combinar los dos gráficos en una figura 
+grafico_comparacion <- plot_grid(
+  grafico_codo, grafico_silhouette,
+  labels = c("A", "B"),
+  ncol = 2, align = "h"
+)
 
-summary(datos_alim)
-apply(datos_alim, 2, sd) #Las variables son casi idénticas (correlación ~ 1), por lo que la matriz de covarianza se vuelve singular y Mclust no puede estimarla.
-cor(datos_alim) #Se observa pocas correlaciones, por lo que no se continua con este modelo
+# Mostrar en consola
+print(grafico_comparacion)
 
-#Se basa en los análisis anteriores, en la revisión de resultados gráficos.
-BIC <- mclustBIC(datos_alim[, 1:4]) # selección de las variables estandarizadas
-plot(BIC)
+# Guardar archivo en fondo blanco o negro
+ggsave("comparacion_kmeans.png", grafico_comparacion,
+       width = 14, height = 6, dpi = 300, bg = "white")
 
-#Evaluación de los descriptivos de los modelos
-mod1 <- Mclust(datos_alim, x = BIC)
-summary(mod1, parameters = TRUE)
+browseURL("comparacion_kmeans.png")
 
-#Revisar los agrupamientos de manera visual
-plot(mod1, what = "classification")
+# 3. Asignación e interpretación de clústeres
+
+# 3.1 Ajustar modelo K-means
+# Ajustar el modelo con k = 2 clusters (puedes cambiar a k = 8 si el codo/silhouette lo sugiere)
+
+fit1 <- kmeans(datos_alim, centers = 2, nstart = 25)
+
+# Añadir el número de cluster al data frame
+datos_alim <- datos_alim %>%
+  mutate(fit1_cluster = fit1$cluster)
+
+# 3.2 Resumen descriptivo de los clusters
+
+# Calcular la media de cada variable por cluster
+resumen_clusters <- datos_alim %>%
+  group_by(fit1_cluster) %>%
+  summarise(across(everything(), mean, na.rm = TRUE))
+
+# Visualizar
+print(resumen_clusters)
+
+# 3.3 Tamaño de los clusters
+conteo_clusters <- table(datos_alim$fit1_cluster)
+
+# Conteo absoluto y porcentaje
+conteo_clusters
+round(prop.table(conteo_clusters) * 100, 2)
+
+
+#3.4 Calcular medias por cluster y grupo
+perfil_clusters <- datos_alim %>%
+  group_by(fit1_cluster) %>%
+  summarise(across(everything(), mean)) %>%
+  pivot_longer(cols = -fit1_cluster, names_to = "grupo", values_to = "media")
+
+# Gráfico de líneas (perfil promedio)
+ggplot(perfil_clusters, aes(x = grupo, y = media, 
+                            color = as.factor(fit1_cluster), group = fit1_cluster)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("#0073C2FF", "#E69F00"),
+                     labels = c("Cluster 1", "Cluster 2")) +
+  labs(title = "Conglomerados por grupos de alimentos",
+       x = "Grupo de alimentos", y = "Valor medio (Z-score)",
+       color = "Conglomerado") +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# 3.5 Visualización de comportamiento por grupo
+tema_box <- theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 11),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  )
+
+p1 <- ggplot(datos_alim, aes(x = as.factor(fit1_cluster), y = CEREALES, fill = as.factor(fit1_cluster))) +
+  geom_boxplot(alpha = 0.8, outlier.color = "gray40") +
+  labs(title = "A. Cereales", x = "", y = "") +
+  scale_fill_manual(values = c("#0073C2FF", "#E69F00")) +
+  tema_box
+
+p2 <- ggplot(datos_alim, aes(x = as.factor(fit1_cluster), y = CARNES, fill = as.factor(fit1_cluster))) +
+  geom_boxplot(alpha = 0.8, outlier.color = "gray40") +
+  labs(title = "B. Carnes", x = "", y = "") +
+  scale_fill_manual(values = c("#0073C2FF", "#E69F00")) +
+  tema_box
+
+
+p3 <- ggplot(datos_alim, aes(x = as.factor(fit1_cluster), y = LEGUMINOSAS, fill = as.factor(fit1_cluster))) +
+  geom_boxplot(alpha = 0.8, outlier.color = "gray40") +
+  labs(title = "C. Leguminosas", x = "", y = "") +
+  scale_fill_manual(values = c("#0073C2FF", "#E69F00")) +
+  tema_box
+
+p4 <- ggplot(datos_alim, aes(x = as.factor(fit1_cluster), y = VERDURAS, fill = as.factor(fit1_cluster))) +
+  geom_boxplot(alpha = 0.8, outlier.color = "gray40") +
+  labs(title = "D. Verduras", x = "", y = "") +
+  scale_fill_manual(values = c("#0073C2FF", "#E69F00")) +
+  tema_box
+
+p5 <- ggplot(datos_alim, aes(x = as.factor(fit1_cluster), y = BEBIDAS, fill = as.factor(fit1_cluster))) +
+  geom_boxplot(alpha = 0.8, outlier.color = "gray40") +
+  labs(title = "E. Bebidas", x = "", y = "") +
+  scale_fill_manual(values = c("#0073C2FF", "#E69F00")) +
+  tema_box
+
+p6 <- ggplot(datos_alim, aes(x = as.factor(fit1_cluster), y = GOLOSINAS, fill = as.factor(fit1_cluster))) +
+  geom_boxplot(alpha = 0.8, outlier.color = "gray40") +
+  labs(title = "F. Golosinas", x = "", y = "") +
+  scale_fill_manual(values = c("#0073C2FF", "#E69F00")) +
+  tema_box
+
+(p1 + p2) /
+  (p3 + p4) /
+  (p5 + p6) +
+  plot_annotation(
+    title = "Distribución del consumo alimentario por clúster",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 16, hjust = 0.5)
+    )
+  ) &
+  theme(
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold")
+  )
+##############################################################################
+
+#CREAR Y GUARDAR BASE NUEVA
+#1. Usaremos las bases de "datos" y "datos_alim" que incluya los clústeres
+
+#Devolver la columna "FOLIO" a datos_alim
+datos_alim2 <- datos_alim %>%
+  mutate(FOLIO = resumen_z$FOLIO) %>%
+  relocate(FOLIO, .before = 1)
+
+
+# Tomamos solo laS columnas de datos necesarios
+datos_base <- datos %>%
+  select(FOLIO, "FECHANACIMIENTO", "EDAD", "SEXO",
+         "ESTADOCIVIL", "DELEGACION_1", "COLONIA", "CP", "VALOR",
+         "ESTRATO", "GRADO", "NIVELEDUCACION", "ACTIVIDAD")
+
+# Unimos con datos_alim (que ya tiene FOLIO)
+base_final <- datos_base %>%
+  left_join(datos_alim2, by = "FOLIO")
+
+# Unimos con datos_alim (que ya tiene FOLIO)
+base_final <- datos_base %>%
+  left_join(datos_alim2, by = "FOLIO")
+
+dim(base_final)
+names(base_final)[1:20]  # para ver las primeras columnas
+
+#Guardar la base nueva en CSV
+write.csv(base_final, "base_final", row.names = FALSE)
+
+
+##################################################
+
+######ANALISIS DESCRIPTIVO######
+
+#Tomamos "base_final" para analizar y comparar las variables sociodemográficas por clusteres
+
+#1. Variable SEXO
+
+#Frecuencias y porcentajes por sexo y cluster (porcentaje dentro de cluster)
+
+# Tabla de frecuencias y porcentajes por sexo (por fila)
+tabla_sexo_cluster <- base_final %>%
+  filter(!is.na(SEXO), !is.na(fit1_cluster)) %>%
+  dplyr::count(SEXO, fit1_cluster, name = "n") %>%
+  group_by(SEXO) %>%
+  mutate(
+    total_sexo = sum(n),
+    porcentaje = round(n / total_sexo * 100, 2)
+  ) %>%
+  ungroup() %>%
+  arrange(SEXO, fit1_cluster)
+
+tabla_sexo_cluster
+
+# Tabla para prueba estadística
+tabla_prueba_sexo <- table(
+  base_final$SEXO,
+  base_final$fit1_cluster
+)
+
+
+#1.1.1 Filtrar solo Mujeres
+mujeres <- tabla_sexo_cluster %>% 
+  filter(SEXO == "Femenino")
+
+# n por clúster
+x_m <- mujeres$n                # c(n_cluster1, n_cluster2)
+
+# total de mujeres
+n_m <- sum(mujeres$n)
+
+# prueba de proporciones
+prop_mujeres <- prop.test(x = x_m, n = c(n_m, n_m))
+prop_mujeres
+prop_mujeres$p.value
+
+#1.1.2 Filtrar solo hombres
+hombres <- tabla_sexo_cluster %>% 
+  filter(SEXO == "Masculino")
+
+# n por clúster
+x_h <- hombres$n
+
+# total hombres
+n_h <- sum(hombres$n)
+
+# prueba de proporciones
+prop_hombres <- prop.test(x = x_h, n = c(n_h, n_h))
+prop_hombres
+prop_hombres$p.value
+
+
+# 1.2 prueba Chi-cuadrada para tabla completa
+
+#prueba_sexo <- chisq.test(tabla_prueba_sexo)
+
+#prueba_sexo$p.value
+
+
+#2. Variable Edad 
+
+#Edad (mediana) y rango intercuartílico (IQR) por clúster
+
+shapiro.test(base_final$EDAD) #No hay normalidad
+
+edad_cluster_stats <- base_final %>%
+  group_by(fit1_cluster) %>%
+  summarise(
+    mediana_edad = median(EDAD, na.rm = TRUE),
+    IQR = IQR(EDAD, na.rm = TRUE),
+    p25 = quantile(EDAD, 0.25, na.rm = TRUE),
+    p75 = quantile(EDAD, 0.75, na.rm = TRUE)
+  )
+
+edad_cluster_stats
+
+#2.1 Prueba de comparación de edad entre clústeres
+
+base_final$fit1_cluster <- factor(base_final$fit1_cluster)
+
+p_edad <- wilcox.test(EDAD ~ fit1_cluster, data = base_final) #U de Mann-Whitney o Wilcox rank-sum para muestras independientes
+
+p_edad
+p_edad$p.value
+
+
+
+#3 Variable ESTADO CIVIL
+
+
+# 3.1 Colapsar variables y recodificación
+tabla_estadocivil_cluster <- base_final %>%
+  mutate(
+    estadocivil_rec = case_when(
+      ESTADOCIVIL %in% c("Casado", "Union Libre") ~ "Con pareja",
+      ESTADOCIVIL %in% c("Soltero", "Divorciado", "Separado", "Viudo") ~ "Sin pareja",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  
+  # 3.2 Eliminar no reportados para la comparación
+  filter(!is.na(estadocivil_rec)) %>%
+  
+  # 3.3 Frecuencias y porcentajes por  cada cluster
+  group_by(estadocivil_rec, fit1_cluster) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  
+  group_by(fit1_cluster) %>%
+  mutate(
+    total_cluster = sum(n),
+    porcentaje = round((n / total_cluster) * 100, 2)
+  ) %>%
+  ungroup() %>%
+  
+  arrange(estadocivil_rec, fit1_cluster)
+
+tabla_estadocivil_cluster
+
+tabla_prueba_estadocivil <- table(
+  tabla_estadocivil_cluster$estadocivil_rec,
+  tabla_estadocivil_cluster$fit1_cluster
+)
+
+  # 3.4 Convertir en una tabla de 2x2
+tabla_prueba_estadocivil <- xtabs(
+  n ~ estadocivil_rec + fit1_cluster,
+  data = tabla_estadocivil_cluster
+)
+
+tabla_prueba_estadocivil
+
+
+  # 3.5 Prueba chi cuadrada 
+chisq.test(tabla_prueba_estadocivil)
+
+
+#4. Variable ESCOLARIDAD
+  
+ # 4.1 Colapsar variables
+tabla_prueba_escolaridad <- base_final %>%
+  mutate(
+    NIVELEDUCACION = str_squish(str_to_lower(NIVELEDUCACION)),
+  
+    NIVELEDUCACION_rec = case_when(
+      NIVELEDUCACION %in% c("ninguno", "primaria", "secundaria") ~ "Hasta Educación básica",
+      NIVELEDUCACION %in% c("bachillerato", "tecnico", "técnico") ~ "Media superior",
+      NIVELEDUCACION %in% c("profesional", "licenciatura", "maestría", "maestria", "doctorado") ~ "Superior",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(NIVELEDUCACION_rec), !is.na(fit1_cluster)) %>%
+  { table(.$NIVELEDUCACION_rec, .$fit1_cluster) }
+
+tabla_prueba_escolaridad
+
+  # 4.2 Porcentajes dentro de cada cluster (por columna)
+porc_escolaridad <- prop.table(tabla_prueba_escolaridad, margin = 2) * 100
+round(porc_escolaridad, 1)
+
+  #4.3 Prueba chi cuadrada
+chisq.test(tabla_prueba_escolaridad)
+
+
+# 5.Variable OCUPACIÓN
+
+  #5.1 Colapsar variables
+
+tabla_prueba_ocupación <- base_final %>%
+  mutate(
+    ACTIVIDAD = str_squish(str_to_lower(ACTIVIDAD)),
+    
+    ACTIVIDAD_rec = case_when(
+      ACTIVIDAD %in% c("ejecutivo","profesionista","oficinista") ~ "Empleo formal calificado",
+      ACTIVIDAD %in% c("trabajador hábil","chofer","agricultor pescador","comerciante") ~ "Empleo informal",
+      ACTIVIDAD %in% c("estudiante","jubilado","ama de casa","ninguno") ~ "Fuera del mercado laboral",
+      ACTIVIDAD %in% c("desempleado") ~ "Desempleado",
+      ACTIVIDAD %in% c("otro") ~ "Otro",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(ACTIVIDAD_rec), !is.na(fit1_cluster)) %>%
+  { table(.$ACTIVIDAD_rec, .$fit1_cluster) }
+
+tabla_prueba_ocupación
+
+# 5.2 Porcentajes dentro de cada cluster (por columna)
+porc_ocupación <- prop.table(tabla_prueba_ocupación, margin = 2) * 100
+round(porc_ocupación, 1)
+
+#5.3 Prueba chi cuadrada
+chisq.test(tabla_prueba_ocupación)
+
+
+# 6. Variable IDS
+
+base_final <- base_final %>%
+  mutate(
+    ESTRATO = as.integer(ESTRATO),
+    ESTRATO = factor(ESTRATO, levels = 1:4, ordered = TRUE)
+  )
+
+tabla_ids_cluster <- base_final %>%
+  filter(!is.na(ESTRATO), !is.na(fit1_cluster)) %>%
+  dplyr::count(ESTRATO, fit1_cluster, name = "n") %>%
+  group_by(ESTRATO) %>%
+  mutate(
+    total_estrato = sum(n),
+    porcentaje = round(n / total_estrato * 100, 2)
+  ) %>%
+  ungroup() %>%
+  arrange(ESTRATO, fit1_cluster)
+
+tabla_ids_cluster
+
+tabla_prueba_ids <- base_final %>%
+  filter(!is.na(ESTRATO), !is.na(fit1_cluster)) %>%
+  { table(.$ESTRATO, .$fit1_cluster) }
+
+tabla_prueba_ids
+
+chisq.test(tabla_prueba_ids)
+
+###################################################################
+
+#Crear una base para la regresión a partir de la última base y adicionando columnas nuevas (variables colapsadas)
+
+base_regresion <- base_final %>%
+  mutate(
+    patron = ifelse(fit1_cluster == 2, 0, 1),
+    patron = factor(patron, levels = c(0,1)),
+    
+    Sexo = factor(SEXO, levels = c("Masculino", "Femenino")),
+    
+    Edad = as.numeric(EDAD),
+    
+    Estado_civil = case_when(
+      ESTADOCIVIL %in% c("Casado", "Union Libre") ~ "Con pareja",
+      ESTADOCIVIL %in% c("Soltero", "Divorciado", "Separado", "Viudo") ~ "Sin pareja",
+      TRUE ~ NA_character_
+    ),
+    Estado_civil = factor(Estado_civil, levels = c("Sin pareja", "Con pareja")),
+    
+    NIVELEDUCACION = str_squish(str_to_lower(NIVELEDUCACION)),
+    Escolaridad = case_when(
+      NIVELEDUCACION %in% c("ninguno", "primaria", "secundaria") ~ "Basica",
+      NIVELEDUCACION %in% c("bachillerato", "tecnico", "técnico") ~ "Media superior",
+      NIVELEDUCACION %in% c("profesional", "licenciatura", "maestría", "maestria", "doctorado") ~ "Superior",
+      TRUE ~ NA_character_
+    ),
+    
+    Escolaridad = factor(Escolaridad,
+                         levels = c("Basica", "Media superior", "Superior"),
+                         ordered = TRUE),
+    
+    ACTIVIDAD = str_squish(str_to_lower(ACTIVIDAD)),
+    
+    Ocupacion = case_when(
+      ACTIVIDAD %in% c("ejecutivo","profesionista","oficinista") ~ "Formal calificado",
+      ACTIVIDAD %in% c("trabajador hábil","chofer","agricultor pescador","comerciante") ~ "Informal",
+      ACTIVIDAD %in% c("estudiante","jubilado","ama de casa","ninguno") ~ "Fuera mercado laboral",
+      ACTIVIDAD %in% c("desempleado") ~ "Desempleado",
+      ACTIVIDAD %in% c("otro") ~ "Otro",
+      TRUE ~ NA_character_
+    ),
+    Ocupacion = factor(Ocupacion),
+    
+    IDS = factor(ESTRATO, levels = 1:4, ordered = TRUE)
+  )
+
+#Verificar que no hay modificaciones en la variable de cluster y se creo la variable patron donde 
+# 0 = patrón más saludable (patrón 2)
+# 1 = patrón menos saludable (patrón 1)
+
+table(base_regresion$fit1_cluster)
+table(base_regresion$patron)
+table(base_regresion$fit1_cluster, base_regresion$patron) 
+
+#Resumen de las variables
+
+str(base_regresion[, c("patron", "IDS", "Edad", "Sexo", "Escolaridad", "Ocupacion", "Estado_civil")])
+
+levels(base_regresion$patron)
+
+######################################################################
+
+#Regresión logística binaria
+
+
+#1.GLM
+  
+model <- glm(patron ~ IDS + Edad + Sexo + Escolaridad + Ocupacion + Estado_civil,
+             data = base_regresion,
+             family = binomial)
+
+summary(model)
+ 
+#1.2  Calcular Odd Ratios
+ 
+ exp(coef(model))
+ 
+ #1.3 Calcular el IC 95%
+ resultados <- tidy(model)%>%
+   mutate(OR = exp(estimate),
+          Cl_low = exp(estimate- 1.96*std.error),
+          Cl_high = exp(estimate + 1.96*std.error)
+          )
+
+ view(resultados)
