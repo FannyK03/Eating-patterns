@@ -735,6 +735,11 @@ base_regresion <- base_final %>%
     IDS = factor(ESTRATO, levels = 1:4, ordered = TRUE)
   )
 
+    IDS_cat = factor(ESTRATO,
+             levels = 1;4,
+             labels = cc("Muy bajo", "Bajo", "Medio", "Alto")),
+     IDS_cat = relevel(IDS_cat, ref = "Alto")
+
 #Verificar que no hay modificaciones en la variable de cluster y se creo la variable patron donde 
 # 0 = patrón más saludable (patrón 2)
 # 1 = patrón menos saludable (patrón 1)
@@ -774,3 +779,25 @@ summary(model)
           )
 
  view(resultados)
+
+#2.GLM
+  
+model <- glm(patron ~ IDS_cat + Edad + Sexo + Escolaridad + Ocupacion + Estado_civil,
+             data = base_regresion,
+             family = binomial)
+
+summary(model)
+ 
+#2.2  Calcular Odd Ratios
+ 
+ exp(coef(model))
+ 
+ #2.3 Calcular el IC 95%
+ resultados <- tidy(model)%>%
+   mutate(OR = exp(estimate),
+          Cl_low = exp(estimate- 1.96*std.error),
+          Cl_high = exp(estimate + 1.96*std.error)
+          )
+
+ view(resultados)
+
